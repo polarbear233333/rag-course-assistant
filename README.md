@@ -186,9 +186,6 @@ The system uses an inspectable router instead of a heavy agent framework:
 
 This design keeps the system easy to debug and easy to explain in interviews.
 
-## Resume Description
-
-**Hybrid RAG Course Tutor** — Built a production-style course assistant using Dense Retrieval + BM25 + Reciprocal Rank Fusion, enabling source-grounded QA, exercise generation, mistake diagnosis, learning-profile analytics, and RAG-vs-Pure-LLM benchmarking. Implemented a FastAPI streaming backend, Chroma vector database, multi-format document ingestion, custom RAG evaluation metrics, and a web interface for real-time interaction and citation inspection.
 
 ## Notes
 
