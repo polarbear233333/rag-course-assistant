@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.env
+vector_db/
+chat_log.json
+learning_profile.json
+outputs/*.json
+.DS_Store
