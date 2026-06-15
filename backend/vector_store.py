@@ -14,13 +14,29 @@ from tqdm import tqdm
 
 try:
     from .config import (
-        BM25_B, BM25_K1, COLLECTION_NAME, OPENAI_API_BASE, OPENAI_API_KEY,
-        OPENAI_EMBEDDING_MODEL, RRF_K, TOP_K, VECTOR_DB_PATH,
+        BM25_B,
+        BM25_K1,
+        COLLECTION_NAME,
+        OPENAI_API_BASE,
+        OPENAI_API_KEY,
+        OPENAI_EMBEDDING_MODEL,
+        OPENAI_TIMEOUT_SECONDS,
+        RRF_K,
+        TOP_K,
+        VECTOR_DB_PATH,
     )
 except ImportError:
     from config import (
-        BM25_B, BM25_K1, COLLECTION_NAME, OPENAI_API_BASE, OPENAI_API_KEY,
-        OPENAI_EMBEDDING_MODEL, RRF_K, TOP_K, VECTOR_DB_PATH,
+        BM25_B,
+        BM25_K1,
+        COLLECTION_NAME,
+        OPENAI_API_BASE,
+        OPENAI_API_KEY,
+        OPENAI_EMBEDDING_MODEL,
+        OPENAI_TIMEOUT_SECONDS,
+        RRF_K,
+        TOP_K,
+        VECTOR_DB_PATH,
     )
 
 
@@ -36,14 +52,13 @@ class VectorStore:
     ):
         self.db_path = db_path
         self.collection_name = collection_name
-        self.client = OpenAI(api_key=api_key, base_url=api_base)
+        self.client = OpenAI(api_key=api_key, base_url=api_base, timeout=OPENAI_TIMEOUT_SECONDS)
 
         os.makedirs(db_path, exist_ok=True)
-        self.chroma_client = chromadb.PersistentClient(
-            path=db_path, settings=Settings(anonymized_telemetry=False)
-        )
+        self.chroma_client = chromadb.PersistentClient(path=db_path, settings=Settings(anonymized_telemetry=False))
         self.collection = self.chroma_client.get_or_create_collection(
-            name=collection_name, metadata={"description": "课程材料向量数据库"}
+            name=collection_name,
+            metadata={"description": "Course material vector store"},
         )
 
         self._bm25_index: Dict[str, Dict[str, int]] = defaultdict(dict)
@@ -61,13 +76,10 @@ class VectorStore:
 
     def get_embedding(self, text: str) -> List[float]:
         try:
-            response = self.client.embeddings.create(
-                model=OPENAI_EMBEDDING_MODEL,
-                input=text,
-            )
+            response = self.client.embeddings.create(model=OPENAI_EMBEDDING_MODEL, input=text)
             return response.data[0].embedding
-        except Exception as e:
-            print(f"获取 embedding 失败: {e}")
+        except Exception as exc:
+            print(f"获取 embedding 失败: {exc}")
             return []
 
     def _make_doc_id(self, chunk: Dict, idx: int) -> str:
@@ -86,7 +98,7 @@ class VectorStore:
     def add_documents(self, chunks: List[Dict[str, str]]) -> None:
         ids, documents, metadatas, embeddings = [], [], [], []
 
-        for idx, chunk in enumerate(tqdm(chunks, desc="生成 embedding 并添加到向量库", unit="块")):
+        for idx, chunk in enumerate(tqdm(chunks, desc="生成 embedding 并写入向量库", unit="chunk")):
             content = (chunk.get("content", "") or "").strip()
             if not content:
                 continue
@@ -108,13 +120,7 @@ class VectorStore:
             embeddings.append(embedding)
 
         if ids:
-            # upsert makes repeated processing safer than add.
-            self.collection.upsert(
-                ids=ids,
-                documents=documents,
-                metadatas=metadatas,
-                embeddings=embeddings,
-            )
+            self.collection.upsert(ids=ids, documents=documents, metadatas=metadatas, embeddings=embeddings)
             self._reset_bm25_cache()
             print(f"\n已将 {len(ids)} 个文档块写入向量数据库")
 
@@ -125,7 +131,7 @@ class VectorStore:
         tokens: List[str] = []
 
         for part in re.findall(r"[\u4e00-\u9fff]+", text):
-            tokens.extend([w.strip() for w in jieba.lcut(part) if w.strip()])
+            tokens.extend([word.strip() for word in jieba.lcut(part) if word.strip()])
 
         english_parts = re.findall(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?", text)
         if english_parts:
@@ -134,11 +140,11 @@ class VectorStore:
                 eng_tokens = word_tokenize(joined)
             except LookupError:
                 eng_tokens = re.findall(r"[A-Za-z0-9]+(?:'[A-Za-z0-9]+)?", joined)
-            tokens.extend([w.strip() for w in eng_tokens if w.strip()])
+            tokens.extend([word.strip() for word in eng_tokens if word.strip()])
 
         if not tokens:
             tokens = re.findall(r"[A-Za-z0-9]+|[\u4e00-\u9fff]", text)
-        return [t.lower() for t in tokens]
+        return [token.lower() for token in tokens]
 
     def build_bm25_index(self) -> None:
         if self._bm25_built:
@@ -147,8 +153,8 @@ class VectorStore:
 
         try:
             data = self.collection.get(include=["documents", "metadatas"])
-        except Exception as e:
-            print("BM25 索引构建失败:", repr(e))
+        except Exception as exc:
+            print("BM25 索引构建失败:", repr(exc))
             self._bm25_built = True
             return
 
@@ -184,19 +190,19 @@ class VectorStore:
             return []
 
         scores = defaultdict(float)
-        N = len(self._bm25_doc_len)
+        total_docs = len(self._bm25_doc_len)
         for term in tokens:
             postings = self._bm25_index.get(term)
             if not postings:
                 continue
             df = len(postings)
-            idf = math.log((N - df + 0.5) / (df + 0.5) + 1)
+            idf = math.log((total_docs - df + 0.5) / (df + 0.5) + 1)
             for doc_id, tf in postings.items():
                 dl = self._bm25_doc_len.get(doc_id, 1)
                 denom = tf + BM25_K1 * (1 - BM25_B + BM25_B * dl / (self._bm25_avgdl or 1.0))
                 scores[doc_id] += idf * (tf * (BM25_K1 + 1)) / (denom or 1.0)
 
-        ranked_ids = sorted(scores, key=lambda d: scores[d], reverse=True)[:top_k]
+        ranked_ids = sorted(scores, key=lambda doc_id: scores[doc_id], reverse=True)[:top_k]
         results = []
         for rank, doc_id in enumerate(ranked_ids, 1):
             item = dict(self._id_to_doc.get(doc_id, {}))
@@ -216,8 +222,8 @@ class VectorStore:
                 n_results=top_k,
                 include=["documents", "metadatas", "distances"],
             )
-        except Exception as e:
-            print(f"向量检索失败: {e}")
+        except Exception as exc:
+            print(f"向量检索失败: {exc}")
             return []
 
         formatted_results: List[Dict] = []
@@ -242,7 +248,6 @@ class VectorStore:
         return formatted_results
 
     def search_hybrid(self, query: str, top_k: int = TOP_K, candidate_k: Optional[int] = None) -> List[Dict]:
-        """Hybrid retrieval: dense vector + BM25, fused by Reciprocal Rank Fusion."""
         candidate_k = candidate_k or max(top_k * 3, 10)
         dense = self.search(query, candidate_k)
         sparse = self.search_bm25(query, candidate_k)
@@ -265,7 +270,7 @@ class VectorStore:
             debug[doc_id]["bm25_rank"] = rank
             debug[doc_id]["bm25_score"] = item.get("score")
 
-        fused_ids = sorted(scores, key=lambda d: scores[d], reverse=True)[:top_k]
+        fused_ids = sorted(scores, key=lambda doc_id: scores[doc_id], reverse=True)[:top_k]
         results: List[Dict] = []
         for rank, doc_id in enumerate(fused_ids, 1):
             item = dict(by_id.get(doc_id, {}))
@@ -283,7 +288,8 @@ class VectorStore:
         except Exception:
             pass
         self.collection = self.chroma_client.get_or_create_collection(
-            name=self.collection_name, metadata={"description": "课程向量数据库"}
+            name=self.collection_name,
+            metadata={"description": "Course material vector store"},
         )
         self._reset_bm25_cache()
         print("向量数据库已清空")

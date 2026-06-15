@@ -1,144 +1,151 @@
-# Hybrid RAG Course Tutor
+# RAG Course Assistant
 
-A production-style Retrieval-Augmented Generation system for course learning scenarios. The project upgrades a classroom NLP/RAG assignment into a GitHub- and resume-ready application with hybrid retrieval, source-grounded generation, streaming FastAPI responses, multi-agent tutoring, custom RAG evaluation, learning profile analytics, and RAG-vs-Pure-LLM benchmarking.
+一个面向课程学习场景的 Hybrid RAG 助教系统。项目提供混合检索、来源追踪、流式回答、多 Agent 路由、学习画像、评测与 benchmark，默认接入 AIHubMix 的 OpenAI 兼容接口。
 
-## Highlights
+## 功能
 
-- **Hybrid retrieval**: combines dense embedding retrieval and BM25 keyword retrieval with Reciprocal Rank Fusion (RRF).
-- **Source-grounded QA**: answers are generated from retrieved course snippets and are encouraged to cite filename, page number, and chunk id.
-- **Streaming FastAPI backend**: `/chat_stream` streams model tokens to the browser, creating a ChatGPT-like user experience.
-- **Multi-agent tutor**: lightweight router automatically switches between QA Agent, Exercise Generation Agent, Mistake Diagnosis Agent, and Learning Profile Agent.
-- **RAG evaluation**: transparent custom metrics inspired by RAGAS-style dimensions, including answer relevance, context precision, citation score, lexical F1, and final score.
-- **Learning profile**: tracks user questions, detects topic distribution, and summarizes review candidates.
-- **Benchmark pipeline**: compares Pure LLM and source-grounded RAG on the same questions.
-- **Document ingestion**: supports PDF, PPTX, DOCX, and TXT; PDF/PPT images can be OCR-enhanced with Tesseract.
+- Hybrid retrieval：Dense embedding + BM25 + RRF 融合召回
+- Source-grounded QA：回答尽量引用文件名、页码和 chunk 编号
+- Streaming API：`/chat_stream` 提供流式回答
+- Multi-agent tutor：自动在问答、出题、错题分析、学习画像之间路由
+- Evaluation：内置透明的 RAG 指标计算
+- Benchmark：对比 Pure LLM 和 Source-grounded RAG
+- Learning profile：根据最近提问生成学习画像和复习候选主题
+- Document ingestion：支持 PDF、PPTX、DOCX、TXT，PDF/PPT 图片可选 OCR
 
-## System Architecture
+## 默认模型配置
 
-```text
-course files /data
-      |
-      v
-DocumentLoader -> Semantic-aware TextSplitter -> Chroma Vector DB
-      |                                      |
-      |                                      v
-      |                         Dense Retrieval + BM25
-      |                                      |
-      v                                      v
-FastAPI Backend <---- RRF Hybrid Retriever <---- Multi-Agent Tutor
-      |
-      +-- Streaming Chat UI
-      +-- RAG Evaluation
-      +-- Learning Profile
-      +-- Pure LLM vs RAG Benchmark
+项目默认使用以下环境变量：
+
+```env
+OPENAI_API_BASE=https://aihubmix.com/v1
+MODEL_NAME=alicloud-deepseek-v4-flash
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
 ```
 
-## Project Structure
+如果你更想直接用另一条模型线，也可以把 `MODEL_NAME` 改成：
 
-```text
-.
-├── app.py                         # FastAPI application and API endpoints
-├── main.py                        # CLI chat entry point
-├── chat_store.py                  # Local chat log storage
-├── backend/
-│   ├── rag_agent.py               # Source-grounded RAG generation
-│   ├── vector_store.py            # Chroma + Dense/BM25/RRF retrieval
-│   ├── document_loader.py         # PDF/PPTX/DOCX/TXT loader + OCR hooks
-│   ├── text_splitter.py           # Semantic-aware chunking
-│   ├── agents.py                  # Multi-agent routing and prompt wrappers
-│   ├── rag_evaluator.py           # Custom RAG evaluation metrics
-│   ├── benchmark.py               # Pure LLM vs RAG comparison
-│   ├── learning_profile.py        # User learning profile analytics
-│   └── config.py                  # Environment-driven configuration
-├── scripts/
-│   ├── process_data.py            # Build vector database
-│   ├── evaluate.py                # Run RAG evaluation dataset
-│   └── benchmark.py               # Run RAG-vs-LLM benchmark
-├── frontend/
-│   └── index.html                 # ChatGPT-like web UI
-├── datasets/
-│   └── eval_examples.jsonl        # Example evaluation dataset
-├── data/                          # Put course documents here
-├── outputs/                       # Evaluation / benchmark outputs
-├── requirements.txt
-└── .env.example
+```env
+MODEL_NAME=deepseek-v4-flash
 ```
 
-## Installation
+## 安装
 
 ```bash
-conda create -n hybrid-rag python=3.10 -y
-conda activate hybrid-rag
+conda create -n rag-course-assistant python=3.10 -y
+conda activate rag-course-assistant
 pip install -r requirements.txt
 ```
 
-Create a `.env` file or set environment variables:
+然后创建 `.env`：
 
-```bash
-OPENAI_API_KEY=your_api_key_here
-OPENAI_API_BASE=https://dashscope.aliyuncs.com/compatible-mode/v1
-MODEL_NAME=qwen3-max
-OPENAI_EMBEDDING_MODEL=text-embedding-v3
+```env
+OPENAI_API_KEY=your_aihubmix_api_key_here
+OPENAI_API_BASE=https://aihubmix.com/v1
+MODEL_NAME=alicloud-deepseek-v4-flash
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_TIMEOUT_SECONDS=60
 ```
 
-> The default configuration uses the DashScope OpenAI-compatible endpoint, but any OpenAI-compatible chat and embedding endpoint can be used.
+不要把真实 API key 提交到仓库。
 
-## Build the Knowledge Base
+## 目录结构
 
-Put course materials into `data/`:
+```text
+.
+├── app.py
+├── main.py
+├── chat_store.py
+├── backend/
+│   ├── agents.py
+│   ├── benchmark.py
+│   ├── config.py
+│   ├── document_loader.py
+│   ├── learning_profile.py
+│   ├── rag_agent.py
+│   ├── rag_evaluator.py
+│   ├── text_splitter.py
+│   └── vector_store.py
+├── frontend/
+│   └── index.html
+├── scripts/
+│   ├── benchmark.py
+│   ├── evaluate.py
+│   └── process_data.py
+└── datasets/
+    └── eval_examples.jsonl
+```
+
+## 构建知识库
+
+把课程资料放到 `data/` 目录，例如：
 
 ```text
 data/
-├── LectureNotes.pdf
-├── Slides01.pptx
-└── ...
+├── Lecture01.pdf
+├── Slides02.pptx
+└── notes.txt
 ```
 
-Then run:
+然后运行：
 
 ```bash
 python scripts/process_data.py
 ```
 
-This loads documents, chunks them, generates embeddings, and writes them into the Chroma vector database under `vector_db/`.
+这一步会：
 
-## Run the Web App
+1. 加载文档
+2. 做语义分块
+3. 生成 embedding
+4. 写入 `vector_db/`
+5. 构建后续 Hybrid RAG 使用的 Chroma 数据
+
+## 运行 Web 应用
 
 ```bash
 uvicorn app:app --reload --port 8000
 ```
 
-Open:
+打开：
 
 ```text
 http://127.0.0.1:8000
 ```
 
-## Main API Endpoints
+前端会展示：
+
+- 当前模型与 embedding 配置
+- API 联通状态
+- 当前向量库文档数
+- 本轮问题的检索来源
+- 本地历史问题
+
+## 主要接口
 
 | Endpoint | Method | Description |
 |---|---:|---|
-| `/chat_stream` | POST | Streaming ChatGPT-like answer generation |
-| `/chat_with_sources` | POST | Returns answer + retrieved source snippets |
-| `/retrieve` | POST | Debug top-k hybrid retrieval results |
-| `/agent` | POST | Multi-agent routed answer |
-| `/profile` | GET | Learning profile and topic distribution |
-| `/evaluate` | POST | Custom RAG evaluation over examples |
-| `/benchmark` | POST | Compare Pure LLM vs RAG |
-| `/analyze/recent` | POST | Generate recent learning summary |
-| `/analyze/mistakes` | POST | Generate mistake review |
+| `/health` | GET | 返回当前服务、模型、embedding、向量库状态 |
+| `/config` | GET | 返回运行时配置摘要 |
+| `/chat_stream` | POST | 流式对话 |
+| `/chat_with_sources` | POST | 返回回答和来源 |
+| `/retrieve` | POST | 单独调试检索结果 |
+| `/agent` | POST | 查看自动路由结果 |
+| `/profile` | GET | 获取学习画像 |
+| `/evaluate` | POST | 运行 RAG 评测 |
+| `/benchmark` | POST | 对比 Pure LLM 与 RAG |
+| `/analyze/recent` | POST | 基于最近问答生成学习总结 |
+| `/analyze/mistakes` | POST | 基于最近问答生成错题分析 |
 
-Example:
+示例：
 
 ```bash
 curl -X POST http://127.0.0.1:8000/chat_with_sources \
   -H "Content-Type: application/json" \
-  -d '{"query":"Explain the Master Theorem", "top_k":5}'
+  -d "{\"query\":\"请解释 Master Theorem 的三种情况\",\"top_k\":5}"
 ```
 
-## RAG Evaluation
-
-Run the example dataset:
+## 运行评测
 
 ```bash
 python scripts/evaluate.py \
@@ -146,21 +153,15 @@ python scripts/evaluate.py \
   --output outputs/eval_results.json
 ```
 
-The evaluator reports:
+输出指标包括：
 
-- `answer_relevance`: overlap between question and generated answer.
-- `context_precision`: whether the answer is supported by retrieved contexts.
-- `citation_score`: whether answer includes traceable source evidence.
-- `f1`: lexical overlap with a reference answer, when available.
-- `final_score`: averaged composite score.
+- `answer_relevance`
+- `context_precision`
+- `citation_score`
+- `f1`
+- `final_score`
 
-The dataset format is JSONL:
-
-```json
-{"question":"Explain Dijkstra's algorithm.","reference_answer":"Dijkstra solves single-source shortest paths with non-negative weights."}
-```
-
-## Benchmark: Pure LLM vs RAG
+## 运行 Benchmark
 
 ```bash
 python scripts/benchmark.py \
@@ -168,27 +169,15 @@ python scripts/benchmark.py \
   --output outputs/benchmark_results.json
 ```
 
-The benchmark runs both modes on the same questions:
+该流程会对同一组问题分别跑：
 
-1. **Pure LLM**: no retrieved context.
-2. **Source-grounded RAG**: Dense + BM25 + RRF context is injected before generation.
+1. Pure LLM
+2. Source-grounded RAG
 
-This makes the project more than a demo: it contains a reproducible evaluation pipeline.
+用于比较回答相关性、引用表现和上下文匹配程度。
 
-## Multi-Agent Design
+## 备注
 
-The system uses an inspectable router instead of a heavy agent framework:
-
-- **QA Agent**: explains course concepts with citations.
-- **Exercise Agent**: generates practice problems, hints, and reference answers.
-- **Mistake Agent**: diagnoses misconceptions and suggests targeted fixes.
-- **Profile Agent**: summarizes learning focus and review strategy.
-
-This design keeps the system easy to debug and easy to explain in interviews.
-
-
-## Notes
-
-- If OCR is needed, install Tesseract locally and make sure the language packs are available.
-- If NLTK tokenization fails, run `python download_nltk_punkt.py` or let the fallback regex tokenizer handle English tokens.
-- The project intentionally uses transparent custom evaluation metrics so that it can run without requiring an extra LLM judge.
+- 如果需要 OCR，请本地安装 Tesseract，并准备 `chi_sim`/`eng` 语言包。
+- 如果 NLTK 缺少分词数据，可以运行 `python download_nltk_punkt.py`。
+- 当前仓库没有自带课程资料，首次使用前需要自行准备 `data/` 目录内容。

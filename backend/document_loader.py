@@ -1,14 +1,13 @@
 import os
-from typing import List, Dict, Optional
-
 from io import BytesIO
+from typing import Dict, List
 
 import docx2txt
+import fitz
+import pytesseract
+from PIL import Image
 from PyPDF2 import PdfReader
 from pptx import Presentation
-import fitz
-from PIL import Image
-import pytesseract
 
 try:
     from .config import DATA_DIR
@@ -17,75 +16,53 @@ except ImportError:
 
 
 class DocumentLoader:
-    def __init__(
-        self,
-        data_dir: str = DATA_DIR,
-    ):
+    def __init__(self, data_dir: str = DATA_DIR):
         self.data_dir = data_dir
         self.supported_formats = [".pdf", ".pptx", ".docx", ".txt"]
 
     def load_pdf(self, file_path: str) -> List[Dict]:
-        """加载PDF文件，按页返回内容
-
-        TODO: 实现PDF文件加载
-        要求：
-        1. 使用PdfReader读取PDF文件
-        2. 遍历每一页，提取文本内容
-        3. 格式化为"--- 第 X 页 ---\n文本内容\n"
-        4. 返回pdf内容列表，每个元素包含 {"text": "..."}
-        """
         pages = []
         try:
             reader = PdfReader(file_path)
             image_ocr_logged = False
             try:
-                #利用fitz打开文件
                 pdf_for_images = fitz.open(file_path)
             except Exception:
-                fitz = None
                 pdf_for_images = None
+
             for page_num, page in enumerate(reader.pages, 1):
                 text = page.extract_text() or ""
                 ocr_texts = []
+
                 if pdf_for_images is not None:
                     try:
                         fitz_page = pdf_for_images[page_num - 1]
-                        #获取当页所有图片的xref
-                        image_list = fitz_page.get_images()
-                        for img in image_list:
+                        for img in fitz_page.get_images():
                             xref = img[0]
                             pix = fitz_page.get_pixmap(xref=xref)
-                            # 转换为PNG格式
-                            img_bytes = pix.tobytes("png")
-                            image = Image.open(BytesIO(img_bytes))
+                            image = Image.open(BytesIO(pix.tobytes("png")))
                             ocr_result = pytesseract.image_to_string(image, lang="chi_sim+eng")
                             if ocr_result and ocr_result.strip():
                                 ocr_texts.append(ocr_result.strip())
                     except Exception:
                         pass
+
                 if ocr_texts:
                     if not image_ocr_logged:
-                        print("成功识别图片")
+                        print("已识别 PDF 图片中的文字")
                         image_ocr_logged = True
-                    text = text + "\n【图片识别文本】\n" + "\n".join(ocr_texts)
+                    text = text + "\n【图片 OCR】\n" + "\n".join(ocr_texts)
+
                 formatted_text = f"--- 第 {page_num} 页 ---\n{text}\n"
                 pages.append({"text": formatted_text})
+
             if pdf_for_images is not None:
                 pdf_for_images.close()
-        except Exception as e:
-            print(f"加载PDF文件失败: {e}")
+        except Exception as exc:
+            print(f"加载 PDF 失败: {exc}")
         return pages
 
     def load_pptx(self, file_path: str) -> List[Dict]:
-        """加载PPT文件，按幻灯片返回内容
-
-        TODO: 实现PPT文件加载
-        要求：
-        1. 使用Presentation读取PPT文件
-        2. 遍历每一页，提取文本内容
-        3. 格式化为"--- 幻灯片 X ---\n文本内容\n"
-        4. 返回幻灯片内容列表，每个元素包含 {"text": "..."}
-        """
         slides = []
         try:
             presentation = Presentation(file_path)
@@ -96,57 +73,49 @@ class DocumentLoader:
                 for shape in slide.shapes:
                     if hasattr(shape, "text"):
                         text_content += shape.text + "\n"
-                    if Image is not None and BytesIO is not None and hasattr(shape, "image"):
+                    if hasattr(shape, "image"):
                         try:
-                            image_blob = shape.image.blob
-                            image = Image.open(BytesIO(image_blob))
+                            image = Image.open(BytesIO(shape.image.blob))
                             ocr_result = pytesseract.image_to_string(image, lang="chi_sim+eng")
                             if ocr_result and ocr_result.strip():
                                 ocr_texts.append(ocr_result.strip())
                         except Exception:
                             pass
+
                 if ocr_texts:
                     if not image_ocr_logged:
-                        print("成功识别图片")
+                        print("已识别 PPT 图片中的文字")
                         image_ocr_logged = True
-                    text_content = text_content + "\n【图片识别文本】\n" + "\n".join(ocr_texts)
+                    text_content = text_content + "\n【图片 OCR】\n" + "\n".join(ocr_texts)
+
                 formatted_text = f"--- 幻灯片 {slide_num} ---\n{text_content}\n"
                 slides.append({"text": formatted_text})
-        except Exception as e:
-            print(f"加载PPT文件失败: {e}")
+        except Exception as exc:
+            print(f"加载 PPTX 失败: {exc}")
         return slides
 
     def load_docx(self, file_path: str) -> str:
-        """加载DOCX文件
-        TODO: 实现DOCX文件加载
-        要求：
-        1. 使用docx2txt读取DOCX文件
-        2. 返回文本内容
-        """
         try:
-            content = docx2txt.process(file_path)
-            return content
-        except Exception as e:
-            print(f"加载DOCX文件失败: {e}")
+            return docx2txt.process(file_path)
+        except Exception as exc:
+            print(f"加载 DOCX 失败: {exc}")
             return ""
 
     def load_txt(self, file_path: str) -> str:
-        """加载TXT文件
-        TODO: 实现TXT文件加载
-        要求：
-        1. 使用open读取TXT文件（注意使用encoding="utf-8"）
-        2. 返回文本内容
-        """
-        try:
-            with open(file_path, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return content
-        except Exception as e:
-            print(f"加载TXT文件失败: {e}")
-            return ""
+        encodings = ["utf-8", "utf-8-sig", "gbk"]
+        for encoding in encodings:
+            try:
+                with open(file_path, "r", encoding=encoding) as file:
+                    return file.read()
+            except UnicodeDecodeError:
+                continue
+            except Exception as exc:
+                print(f"加载 TXT 失败: {exc}")
+                return ""
+        print(f"加载 TXT 失败: 无法识别编码 {file_path}")
+        return ""
 
     def load_document(self, file_path: str) -> List[Dict[str, str]]:
-        """加载单个文档，PDF和PPT按页/幻灯片分割，返回文档块列表"""
         ext = os.path.splitext(file_path)[1].lower()
         filename = os.path.basename(file_path)
         documents = []
@@ -205,14 +174,12 @@ class DocumentLoader:
         return documents
 
     def load_all_documents(self) -> List[Dict[str, str]]:
-        """加载数据目录下的所有文档"""
         if not os.path.exists(self.data_dir):
             print(f"数据目录不存在: {self.data_dir}")
-            return None
+            return []
 
         documents = []
-
-        for root, dirs, files in os.walk(self.data_dir):
+        for root, _, files in os.walk(self.data_dir):
             for file in files:
                 ext = os.path.splitext(file)[1].lower()
                 if ext in self.supported_formats:
@@ -221,5 +188,4 @@ class DocumentLoader:
                     doc_chunks = self.load_document(file_path)
                     if doc_chunks:
                         documents.extend(doc_chunks)
-
         return documents

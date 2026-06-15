@@ -17,13 +17,7 @@ class AgentResult:
 
 
 class MultiAgentTutor:
-    """Lightweight multi-agent orchestration for a course RAG tutor.
-
-    The system is intentionally simple and inspectable: a router chooses a
-    mode, then specialized prompt wrappers call the same source-grounded RAG
-    backend. This is easier to explain in a resume/interview than a black-box
-    agent framework.
-    """
+    """Simple and inspectable multi-agent orchestration."""
 
     def __init__(self, rag_agent: Optional[RAGAgent] = None):
         self.rag = rag_agent or RAGAgent()
@@ -33,18 +27,20 @@ class MultiAgentTutor:
         exercise_words = ["出题", "练习", "quiz", "exercise", "question generation", "生成题"]
         mistake_words = ["错题", "错误", "mistake", "薄弱", "不会", "confusing", "confusion"]
         summary_words = ["总结", "profile", "学习画像", "复习计划", "study plan"]
-        if any(w in q for w in exercise_words):
+        if any(word in q for word in exercise_words):
             return "exercise_agent"
-        if any(w in q for w in mistake_words):
+        if any(word in q for word in mistake_words):
             return "mistake_agent"
-        if any(w in q for w in summary_words):
+        if any(word in q for word in summary_words):
             return "profile_agent"
         return "qa_agent"
 
     def _agent_instruction(self, mode: str, query: str) -> str:
         if mode == "exercise_agent":
             return f"""你是课程出题 Agent。请基于检索到的课程资料为学生生成高质量练习题。
+
 学生需求：{query}
+
 输出格式：
 1. Knowledge Point
 2. Difficulty
@@ -52,10 +48,13 @@ class MultiAgentTutor:
 4. Hint
 5. Reference Answer
 6. Source Evidence
+
 要求题目必须和资料相关，答案必须可验证。"""
         if mode == "mistake_agent":
             return f"""你是错题诊断 Agent。请分析学生问题中可能体现的概念混淆，并基于课程资料纠正。
+
 学生问题：{query}
+
 输出格式：
 1. Possible Misconception
 2. Correct Understanding
@@ -64,7 +63,9 @@ class MultiAgentTutor:
 5. Source Evidence"""
         if mode == "profile_agent":
             return f"""你是学习画像 Agent。请根据学生请求生成学习状态分析和复习建议。
+
 学生请求：{query}
+
 输出格式：
 1. Recent Learning Focus
 2. Weak Points
