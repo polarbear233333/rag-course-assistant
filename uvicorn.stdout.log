@@ -1,0 +1,5 @@
+chat_log.json will be saved to: D:\本科\大三下\实验室导师\王烁老师\RAG\rag-course-assistant\chat_log.json
+INFO:     127.0.0.1:63516 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:61900 - "GET /health HTTP/1.1" 200 OK
+BM25 索引构建：向量库为空
+INFO:     127.0.0.1:61901 - "POST /chat HTTP/1.1" 200 OK
